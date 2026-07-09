@@ -1,3 +1,4 @@
+// David's Magic RPG - WebGL 3D Cubist Demo
 import * as THREE from 'three';
 
 // ==========================================
