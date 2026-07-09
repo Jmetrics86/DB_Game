@@ -452,6 +452,7 @@ class DemoGame {
   private gravity = -20;
   private jumpForce = 8;
   private boundaries = 23; // Size of arena
+  private cameraAngle = 0;
 
   // Combat State
   private isAttacking = false;
@@ -548,12 +549,12 @@ class DemoGame {
   }
 
   private initEnvironment() {
-    // Large grid floor (Cubist Ground)
+    // Large grid floor (Cubist Ground - Grass)
     const floorSize = 50;
     const floorGeo = new THREE.PlaneGeometry(floorSize, floorSize);
     const floorMat = new THREE.MeshStandardMaterial({
-      color: 0x141d26,
-      roughness: 0.85,
+      color: 0x7cb342, // Light Green Grass
+      roughness: 0.9,
     });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
@@ -562,7 +563,7 @@ class DemoGame {
 
     // Outer boundary walls (Minecraft Castle Walls)
     const wallMat = new THREE.MeshStandardMaterial({
-      color: 0x232b35,
+      color: 0x3e4a56,
       roughness: 0.9,
     });
 
@@ -597,22 +598,41 @@ class DemoGame {
       this.scene.add(blockE);
     }
 
-    // Scattered blocks inside arena (Minecraft Obstacles)
+    // Cubist Trees (brown trunk, dark green conical top)
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 });
+    const foliageMat = new THREE.MeshStandardMaterial({ color: 0x143d16, roughness: 0.9 });
+
     for (let i = 0; i < 15; i++) {
-      const size = Math.random() * 2 + 1;
-      const height = Math.random() * 4 + 1;
-      const obstacleGeo = new THREE.BoxGeometry(size, height, size);
-      const obstacle = new THREE.Mesh(obstacleGeo, wallMat);
-      obstacle.position.set(
-        Math.random() * 30 - 15,
-        height / 2,
-        Math.random() * 30 - 15
+      const treeGroup = new THREE.Group();
+
+      // Trunk (brown bark)
+      const trunkHeight = Math.random() * 1.5 + 2.0;
+      const trunkGeo = new THREE.BoxGeometry(0.4, trunkHeight, 0.4);
+      const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+      trunk.position.y = trunkHeight / 2;
+      trunk.castShadow = true;
+      trunk.receiveShadow = true;
+      treeGroup.add(trunk);
+
+      // Foliage (conical dark green top - low-poly pyramid)
+      const foliageHeight = Math.random() * 1.5 + 2.0;
+      const foliageGeo = new THREE.ConeGeometry(1.2, foliageHeight, 4);
+      const foliage = new THREE.Mesh(foliageGeo, foliageMat);
+      foliage.position.y = trunkHeight + foliageHeight / 2 - 0.2;
+      foliage.castShadow = true;
+      foliage.receiveShadow = true;
+      treeGroup.add(foliage);
+
+      // Place tree randomly
+      treeGroup.position.set(
+        Math.random() * 36 - 18,
+        0,
+        Math.random() * 36 - 18
       );
+
       // Avoid spawn zone (center)
-      if (obstacle.position.length() > 5) {
-        obstacle.castShadow = true;
-        obstacle.receiveShadow = true;
-        this.scene.add(obstacle);
+      if (treeGroup.position.length() > 5) {
+        this.scene.add(treeGroup);
       }
     }
   }
@@ -959,7 +979,7 @@ class DemoGame {
     }
 
     // Determine movement direction vectors
-    const forwardVec = new THREE.Vector3(0, 0, 1).applyQuaternion(this.camera.quaternion);
+    const forwardVec = new THREE.Vector3(0, 0, -1).applyQuaternion(this.camera.quaternion);
     forwardVec.y = 0;
     forwardVec.normalize();
 
@@ -1085,8 +1105,21 @@ class DemoGame {
   }
 
   private updateCamera(dt: number) {
-    // Camera smoothly interpolates behind the player character
-    const targetCamOffset = new THREE.Vector3(0, 7, 10);
+    // Q & E Camera Rotation
+    const rotationSpeed = 2.0; // Radians per second
+    if (this.keys['q']) {
+      this.cameraAngle -= rotationSpeed * dt;
+    }
+    if (this.keys['e']) {
+      this.cameraAngle += rotationSpeed * dt;
+    }
+
+    // Compute camera offset based on angle
+    const radius = 10;
+    const height = 7;
+    const offsetX = Math.sin(this.cameraAngle) * radius;
+    const offsetZ = Math.cos(this.cameraAngle) * radius;
+    const targetCamOffset = new THREE.Vector3(offsetX, height, offsetZ);
     const targetCamPos = new THREE.Vector3().copy(this.playerPos).add(targetCamOffset);
 
     // Simple smooth damping
