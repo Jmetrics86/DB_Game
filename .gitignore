@@ -1,0 +1,58 @@
+# Zip files and extracted requirements
+mynewvideogamewithblackclover.zip
+extracted_files/
+
+# Unity standard ignore rules
+[Library]/
+[Temp]/
+[Obj]/
+[Build]/
+[Builds]/
+[Logs]/
+[UserSettings]/
+MemoryCaptures/
+Assets/AssetStoreTools*
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.opendb
+*.VC.db
+
+# Unreal Engine standard ignore rules
+Binaries/
+Build/
+DerivedDataCache/
+Intermediate/
+Saved/
+AudioStudio/
+.ue4duck
+*.VC.db
+*.opensdf
+*.opendb
+*.sdf
+*.sln
+*.suo
+*.xcodeproj
+*.xcworkspace
+
+# Godot standard ignore rules
+.import/
+export.cfg
+export_presets.cfg
+.mono/
+data_*/
+
+# IDE and OS
+.vs/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
