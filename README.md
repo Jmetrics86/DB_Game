@@ -1,13 +1,23 @@
-# David's Magic RPG: Black Clover Inspired Action game
+# David's Magic RPG: Agentic Web-First 3D Game
 
-Welcome to the project repository for David's Black Clover-inspired Open-World Action RPG game. This project aims to build a 3D anime-style action game using AI-assisted development tools.
+Welcome to the project repository for David's Black Clover-inspired Open-World Action RPG game. This project is built using a **Code-First, Web-Based 3D Stack (TypeScript + Three.js + Rapier Physics)** optimized for maximum agentic development and automated testing.
+
+---
+
+## Technical Stack & Architecture
+
+To allow AI agents to write 100% of the codebase and test it automatically without relying on complex visual GUI editors (like Unity or Unreal), the game uses:
+- **Client (Frontend)**: [Vite](https://vitejs.dev/) + [TypeScript](https://www.typescriptlang.org/) + [Three.js](https://threejs.org/) for 3D rendering.
+- **Physics**: [Rapier.js](https://rapier.rs/) for high-performance 3D collision and movement.
+- **Server (Multiplayer Backend)**: [Node.js](https://nodejs.org/) + [Colyseus.js](https://colyseus.io/) for multiplayer state synchronization.
+- **Testing**: [Playwright](https://playwright.dev/) for headless browser integration testing of game loops and mechanics.
 
 ---
 
 ## Game Design Document (GDD)
 
 ### 1. Genre & Inspirations
-- **Genre**: Open-World Action RPG
+- **Genre**: Open-World Action RPG (Web-based 3D)
 - **Combat Feel**: *Genshin Impact* style real-time combat
 - **Character Creation**: *Dragon Ball Xenoverse* style deep customization
 - **Exploration**: *Elden Ring* style open-world exploration
@@ -15,10 +25,10 @@ Welcome to the project repository for David's Black Clover-inspired Open-World A
 
 ### 2. Character Creation & Customization
 Players customize their character's visual appearance and starting parameters:
-- **Appearance Options**: Hair, Face, Skin, Outfit
+- **Appearance Options**: Hair, Face, Skin, Outfit (controlled via CSS overlay + custom 3D shader parameters)
 - **Magic Attribute**: Selected during character creation.
 - **Kingdom**: Selected during character creation.
-- **Grimoire Ceremony**: After character creation, the player receives a Grimoire during an in-game ceremony:
+- **Grimoire Ceremony**: After character creation, the player receives a Grimoires during an in-game ceremony:
   - **3-Leaf Grimoire**: Normal stats.
   - **4-Leaf Grimoire**: Double magic power, unlocks rare spells.
   - **5-Leaf Grimoire**: Double HP, unlocks Devil abilities and a secret storyline.
@@ -86,7 +96,7 @@ Every magic type has a set of actions: **Basic Attack**, **Heavy Attack**, **Das
 - **Unlocks**: New spells, new outfits, better Grimoires, and powerful transformations.
 
 ### 9. Graphics & Visuals
-- Anime-style 3D art direction.
+- Anime-style 3D art direction (cel-shaded rendering).
 - Large, flashing magical explosions.
 - Flying combat capabilities.
 - Dynamic weather systems.
@@ -95,5 +105,5 @@ Every magic type has a set of actions: **Basic Attack**, **Heavy Attack**, **Das
 
 ---
 
-## Technical Stack Recommendation
-For details on the proposed tools, timeline phases, and cost breakdowns, please refer to the `implementation_plan.md` in the project documentation.
+## Detailed Project Plan
+For details on the proposed tools, timeline phases, and cost breakdowns, please refer to the [Implementation Plan](file:///C:/Users/jason.brewster/.gemini/antigravity/brain/57551937-d7e2-460e-86c8-e76554d8e961/implementation_plan.md).
