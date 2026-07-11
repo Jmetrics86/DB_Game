@@ -190,6 +190,7 @@ interface Particle {
   velocity: THREE.Vector3;
   life: number;
   maxLife: number;
+  type?: string;
 }
 
 interface Projectile {
@@ -952,6 +953,34 @@ class Slime {
 }
 
 // ==========================================
+// Gold Drop Class
+// ==========================================
+class GoldDrop {
+  mesh: THREE.Mesh;
+  position: THREE.Vector3;
+  amount: number;
+  life: number = 15.0; // Despawns after 15 seconds
+
+  constructor(pos: THREE.Vector3, amount: number) {
+    this.position = new THREE.Vector3().copy(pos);
+    this.amount = amount;
+
+    // Small golden coin pile representation
+    const geo = new THREE.CylinderGeometry(0.18, 0.22, 0.10, 6);
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xffd700,
+      emissive: 0x996600,
+      roughness: 0.1,
+      metalness: 0.9
+    });
+    this.mesh = new THREE.Mesh(geo, mat);
+    this.mesh.position.copy(pos);
+    this.mesh.position.y = 0.05; // Rest on ground
+    this.mesh.castShadow = true;
+  }
+}
+
+// ==========================================
 // Demo Game Class
 // ==========================================
 class DemoGame {
@@ -972,6 +1001,15 @@ class DemoGame {
   private slimes: Slime[] = [];
   private merchant!: CubistCharacter;
   private merchantPos = new THREE.Vector3(5, 0, 5);
+
+  // Instanced Zones
+  private currentZone: 'kingdom' | 'grasslands' | 'forest' = 'kingdom';
+  private kingdomGroup!: THREE.Group;
+  private grasslandsGroup!: THREE.Group;
+  private returnPortal: THREE.Mesh | null = null;
+
+  // Gold drops
+  private goldDrops: GoldDrop[] = [];
 
   // Mana System
   private playerMaxMana = 100;
@@ -1304,22 +1342,26 @@ class DemoGame {
   }
 
   private initEnvironment() {
-    // 1. Core floor (Kingdom Paved, Grasslands outside)
-    const groundGeo = new THREE.PlaneGeometry(160, 160);
-    const grassMat = new THREE.MeshStandardMaterial({ color: 0x558b2f, roughness: 0.9 }); // Dark grass green
-    const ground = new THREE.Mesh(groundGeo, grassMat);
+    this.kingdomGroup = new THREE.Group();
+    this.scene.add(this.kingdomGroup);
+
+    this.grasslandsGroup = new THREE.Group();
+    this.scene.add(this.grasslandsGroup);
+    this.grasslandsGroup.visible = false; 
+
+    // 1. Ground Grass plane & paved roads
+    const groundGeo = new THREE.PlaneGeometry(120, 120);
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x2e5c1e, roughness: 0.9 });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.scene.add(ground);
 
-    // Kingdom paved town square center
-    const kingdomRoadGeo = new THREE.PlaneGeometry(50, 50);
-    const kingdomRoadMat = new THREE.MeshStandardMaterial({ color: 0x5a6268, roughness: 0.8 }); // Slate paved road
-    const kingdomRoad = new THREE.Mesh(kingdomRoadGeo, kingdomRoadMat);
-    kingdomRoad.rotation.x = -Math.PI / 2;
-    kingdomRoad.position.set(0, 0.01, 0); // Z-fighting fix
+    const kingdomRoadMat = new THREE.MeshStandardMaterial({ color: 0x3d3d3d, roughness: 0.8 });
+    const kingdomRoad = new THREE.Mesh(new THREE.BoxGeometry(50, 0.01, 50), kingdomRoadMat);
+    kingdomRoad.position.set(0, 0.005, 0);
     kingdomRoad.receiveShadow = true;
-    this.scene.add(kingdomRoad);
+    this.kingdomGroup.add(kingdomRoad);
 
     // 2. Kingdom Walls (Safe boundaries, Z: -25 to 25, X: -25 to 25)
     const wallMat = new THREE.MeshStandardMaterial({ color: 0x3e4a56, roughness: 0.9 });
@@ -1331,26 +1373,26 @@ class DemoGame {
       const wN = new THREE.Mesh(new THREE.BoxGeometry(blockWidth, wallHeight, blockWidth), wallMat);
       wN.position.set(i, wallHeight / 2, -25);
       wN.castShadow = true; wN.receiveShadow = true;
-      this.scene.add(wN);
+      this.kingdomGroup.add(wN);
 
       // West Wall
       const wW = new THREE.Mesh(new THREE.BoxGeometry(blockWidth, wallHeight, blockWidth), wallMat);
       wW.position.set(-25, wallHeight / 2, i);
       wW.castShadow = true; wW.receiveShadow = true;
-      this.scene.add(wW);
+      this.kingdomGroup.add(wW);
 
       // East Wall
       const wE = new THREE.Mesh(new THREE.BoxGeometry(blockWidth, wallHeight, blockWidth), wallMat);
       wE.position.set(25, wallHeight / 2, i);
       wE.castShadow = true; wE.receiveShadow = true;
-      this.scene.add(wE);
+      this.kingdomGroup.add(wE);
 
       // South Wall with central gate opening at X = [-5, 5]
       if (Math.abs(i) > 4) {
         const wS = new THREE.Mesh(new THREE.BoxGeometry(blockWidth, wallHeight, blockWidth), wallMat);
         wS.position.set(i, wallHeight / 2, 25);
         wS.castShadow = true; wS.receiveShadow = true;
-        this.scene.add(wS);
+        this.kingdomGroup.add(wS);
       }
     }
 
@@ -1365,13 +1407,13 @@ class DemoGame {
       const tower = new THREE.Mesh(new THREE.BoxGeometry(3.5, 8, 3.5), wallMat);
       tower.position.set(coord[0], 4, coord[1]);
       tower.castShadow = true; tower.receiveShadow = true;
-      this.scene.add(tower);
+      this.kingdomGroup.add(tower);
 
       const roof = new THREE.Mesh(new THREE.ConeGeometry(2.5, 3, 4), new THREE.MeshStandardMaterial({ color: 0x8b0000, roughness: 0.9 }));
       roof.position.set(coord[0], 9.5, coord[1]);
       roof.rotation.y = Math.PI / 4;
       roof.castShadow = true;
-      this.scene.add(roof);
+      this.kingdomGroup.add(roof);
     });
 
     // 3. Kingdom Town Houses (Safe Zone decorations)
@@ -1393,36 +1435,36 @@ class DemoGame {
     const table = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 1.2), new THREE.MeshStandardMaterial({ color: 0x4a2711, roughness: 0.9 }));
     table.position.copy(this.merchantPos).add(new THREE.Vector3(0, 0.5, 1.0));
     table.castShadow = true; table.receiveShadow = true;
-    this.scene.add(table);
+    this.kingdomGroup.add(table);
 
     // Map Table next to Merchant
     const mapTablePos = new THREE.Vector3(2.0, 0, 5.0);
     const mTable = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.9, 1.5), new THREE.MeshStandardMaterial({ color: 0x4a2711, roughness: 0.9 }));
     mTable.position.copy(mapTablePos).add(new THREE.Vector3(0, 0.45, 0));
     mTable.castShadow = true; mTable.receiveShadow = true;
-    this.scene.add(mTable);
+    this.kingdomGroup.add(mTable);
 
     // Parchment map rolled out on table
     const mapParchment = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.04, 1.2), new THREE.MeshStandardMaterial({ color: 0xf5eccd, roughness: 0.9 }));
     mapParchment.position.copy(mapTablePos).add(new THREE.Vector3(0, 0.92, 0));
     mapParchment.castShadow = true;
-    this.scene.add(mapParchment);
+    this.kingdomGroup.add(mapParchment);
 
     // Visual indicators/miniatures on the map
     const miniKingdom = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.15, 0.2), new THREE.MeshStandardMaterial({ color: 0x3e4a56 }));
     miniKingdom.position.copy(mapTablePos).add(new THREE.Vector3(-0.3, 0.95, -0.2));
-    this.scene.add(miniKingdom);
+    this.kingdomGroup.add(miniKingdom);
 
     const miniGrasslands = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.2), new THREE.MeshStandardMaterial({ color: 0x558b2f }));
     miniGrasslands.position.copy(mapTablePos).add(new THREE.Vector3(0.2, 0.95, 0.2));
-    this.scene.add(miniGrasslands);
+    this.kingdomGroup.add(miniGrasslands);
 
     // Paved path to South Gate
     const gatePath = new THREE.Mesh(new THREE.PlaneGeometry(8, 25), kingdomRoadMat);
     gatePath.rotation.x = -Math.PI / 2;
     gatePath.position.set(0, 0.015, 12.5);
     gatePath.receiveShadow = true;
-    this.scene.add(gatePath);
+    this.kingdomGroup.add(gatePath);
 
     // 5. Scattered Trees & Obstacles in Grasslands (Combat Zone)
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 });
@@ -1453,7 +1495,7 @@ class DemoGame {
       }
 
       treeGroup.position.set(x, 0, z);
-      this.scene.add(treeGroup);
+      this.grasslandsGroup.add(treeGroup);
 
       this.obstacleCircles.push({ x, z, radius: 0.4 });
     }
@@ -1474,7 +1516,7 @@ class DemoGame {
     houseGroup.add(roof);
 
     houseGroup.position.copy(pos);
-    this.scene.add(houseGroup);
+    this.kingdomGroup.add(houseGroup);
   }
 
   private initPlayer() {
@@ -1513,11 +1555,20 @@ class DemoGame {
         this.toggleSpellbook();
       }
 
-      // Shop Interact
+      // Shop / Portal Interact
       if (key === 'e') {
-        const dist = this.playerPos.distanceTo(this.merchantPos);
-        if (dist < 3.0) {
-          this.toggleShop();
+        if (this.currentZone === 'kingdom') {
+          const dist = this.playerPos.distanceTo(this.merchantPos);
+          if (dist < 3.0) {
+            this.toggleShop();
+          }
+        } else {
+          const dist = this.playerPos.distanceTo(new THREE.Vector3(0, 0, 0));
+          if (dist < 2.5) {
+            this.switchZone('kingdom');
+            this.createFloatingText('RETURNED TO KINGDOM', this.playerPos, '#00ffcc');
+            sounds.playSpellCast();
+          }
         }
       }
 
@@ -1592,14 +1643,27 @@ class DemoGame {
     window.addEventListener('enemyDefeated', (e: any) => {
       const enemy = e.detail.enemy;
       this.score++;
-      let goldReward = 15;
-      if (enemy.maxHealth === 80) {
-        goldReward = 35; // Mage
-      } else if (enemy.maxHealth === 40) {
-        goldReward = 10; // Slime
+      
+      // Determine gold reward amount
+      let minGold = 5, maxGold = 15;
+      if (enemy.maxHealth === 160 || enemy.maxHealth === 130 || enemy.maxHealth === 80) {
+        // Spooky forest gives double gold
+        minGold = 25; maxGold = 55;
+      } else if (enemy.maxHealth === 80) {
+        // Normal Mage
+        minGold = 20; maxGold = 40;
+      } else if (enemy.maxHealth === 100) {
+        // Normal Goblin
+        minGold = 10; maxGold = 20;
       }
-      this.gold += goldReward;
-      this.createFloatingText('DEFEATED!', enemy.position, '#f9d423');
+
+      const goldAmount = Math.floor(Math.random() * (maxGold - minGold + 1)) + minGold;
+      
+      // Spawn Gold coin pile!
+      const goldDrop = new GoldDrop(enemy.position, goldAmount);
+      this.goldDrops.push(goldDrop);
+      this.scene.add(goldDrop.mesh);
+      
       this.updateHUD();
       this.checkWaveCompletion();
     });
@@ -1642,19 +1706,19 @@ class DemoGame {
         
         <!-- Health Bar -->
         <div style="margin-top: 5px;">Health: <span id="health-val">100</span> / <span id="maxhealth-val">100</span></div>
-        <div class="health-bar-container" style="width: 100%; height: 10px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-top: 2px;">
+        <div class="health-bar-container" style="width: 220px; height: 10px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-top: 2px;">
           <div class="health-bar" id="player-health" style="width: 100%; height: 100%; background: #ff4b2b;"></div>
         </div>
 
         <!-- Mana Bar -->
         <div style="margin-top: 5px;">Mana: <span id="mana-val">100</span> / <span id="maxmana-val">100</span></div>
-        <div class="health-bar-container" style="width: 100%; height: 10px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-top: 2px;">
+        <div class="health-bar-container" style="width: 220px; height: 10px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-top: 2px;">
           <div class="health-bar" id="player-mana" style="width: 100%; height: 100%; background: #2f80ed;"></div>
         </div>
 
         <!-- Stamina Bar -->
         <div style="margin-top: 5px;">Stamina: <span id="stamina-val">3.0</span>s</div>
-        <div class="health-bar-container" style="width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-top: 2px;">
+        <div class="health-bar-container" style="width: 220px; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-top: 2px;">
           <div class="health-bar" id="player-stamina" style="width: 100%; height: 100%; background: #00bcd4;"></div>
         </div>
 
@@ -1936,15 +2000,24 @@ class DemoGame {
     });
 
     document.getElementById('travel-kingdom')!.addEventListener('click', () => {
-      this.teleportPlayer(new THREE.Vector3(0, 0, 0), '🏰 Kingdom Square!');
+      this.switchZone('kingdom');
+      this.toggleTravel();
+      this.createFloatingText('TRAVELLED TO KINGDOM', this.playerPos, '#00ffcc');
+      sounds.playSpellCast();
     });
 
     document.getElementById('travel-grasslands')!.addEventListener('click', () => {
-      this.teleportPlayer(new THREE.Vector3(0, 0, 32), '🌲 Clover Grasslands!');
+      this.switchZone('grasslands');
+      this.toggleTravel();
+      this.createFloatingText('TRAVELLED TO GRASSLANDS', this.playerPos, '#ff9800');
+      sounds.playSpellCast();
     });
 
     document.getElementById('travel-forest')!.addEventListener('click', () => {
-      this.teleportPlayer(new THREE.Vector3(45, 0, -45), '🧙‍♀️ Witch\'s Forest!');
+      this.switchZone('forest');
+      this.toggleTravel();
+      this.createFloatingText('TRAVELLED TO WITCH\'S FOREST', this.playerPos, '#9c27b0');
+      sounds.playSpellCast();
     });
 
     document.getElementById('restart-btn')!.addEventListener('click', () => {
@@ -2183,15 +2256,6 @@ class DemoGame {
       this.isPaused = false;
       document.getElementById('pause-overlay')!.style.display = 'none';
     }
-  }
-
-  private teleportPlayer(targetPos: THREE.Vector3, zoneName: string) {
-    this.playerPos.copy(targetPos);
-    this.player.meshGroup.position.copy(targetPos);
-    this.createSpawnParticles(targetPos);
-    this.createFloatingText(zoneName, targetPos, '#00ffcc');
-    sounds.playSpellCast();
-    this.toggleTravel();
   }
 
   // ==========================================
@@ -2832,7 +2896,9 @@ class DemoGame {
 
     sounds.playSpawnWarning();
 
-    const count = this.goblinsToSpawnNext;
+    // In Witch's Forest, spawn 1.5x more enemies
+    const multiplier = this.currentZone === 'forest' ? 1.5 : 1.0;
+    const count = Math.round(this.goblinsToSpawnNext * multiplier);
 
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
@@ -2843,25 +2909,32 @@ class DemoGame {
         this.playerPos.z + Math.sin(angle) * radius
       );
 
-      if (Math.abs(spawnPos.x) < 27 && Math.abs(spawnPos.z) < 27) {
-        spawnPos.x += spawnPos.x > 0 ? 12 : -12;
-        spawnPos.z += spawnPos.z > 0 ? 12 : -12;
-      }
-
       spawnPos.x = Math.max(-this.boundaries + 3, Math.min(this.boundaries - 3, spawnPos.x));
       spawnPos.z = Math.max(-this.boundaries + 3, Math.min(this.boundaries - 3, spawnPos.z));
 
       const rand = Math.random();
-      if (rand < 0.3) {
+      if (rand < 0.4) {
         const goblin = new Goblin(spawnPos);
+        if (this.currentZone === 'forest') {
+          goblin.health = 160; 
+          goblin.maxHealth = 160;
+        }
         this.goblins.push(goblin);
         this.scene.add(goblin.character.meshGroup);
-      } else if (rand < 0.6) {
+      } else if (rand < 0.7) {
         const mage = new Mage(spawnPos);
+        if (this.currentZone === 'forest') {
+          mage.health = 130;
+          mage.maxHealth = 130;
+        }
         this.mages.push(mage);
         this.scene.add(mage.character.meshGroup);
       } else {
         const slime = new Slime(spawnPos);
+        if (this.currentZone === 'forest') {
+          slime.health = 80;
+          slime.maxHealth = 80;
+        }
         this.slimes.push(slime);
         this.scene.add(slime.meshGroup);
       }
@@ -2970,6 +3043,21 @@ class DemoGame {
     this.slimes = [];
     this.projectiles.forEach((p) => this.scene.remove(p.mesh));
     this.projectiles = [];
+    this.goldDrops.forEach((d) => this.scene.remove(d.mesh));
+    this.goldDrops = [];
+
+    if (this.returnPortal) {
+      this.scene.remove(this.returnPortal);
+      this.returnPortal = null;
+    }
+    this.currentZone = 'kingdom';
+    this.kingdomGroup.visible = true;
+    this.grasslandsGroup.visible = false;
+    this.merchant.meshGroup.visible = true;
+
+    // Reset lighting
+    this.scene.fog = new THREE.FogExp2(0x0c0f12, 0.025);
+    this.renderer.setClearColor(0x0c0f12);
 
     document.getElementById('game-over-overlay')!.style.display = 'none';
     document.getElementById('spawner-countdown')!.style.display = 'none';
@@ -3010,6 +3098,29 @@ class DemoGame {
         maxLife: 0.5,
       });
     }
+  }
+
+  private createHoverParticle(pos: THREE.Vector3) {
+    const geo = new THREE.BoxGeometry(0.04, Math.random() * 0.2 + 0.1, 0.04);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x80deea, transparent: true, opacity: 0.6 });
+    const pMesh = new THREE.Mesh(geo, mat);
+
+    const angle = Math.random() * Math.PI * 2;
+    const dist = Math.random() * 0.5;
+    pMesh.position.set(
+      pos.x + Math.cos(angle) * dist,
+      0.01,
+      pos.z + Math.sin(angle) * dist
+    );
+    this.scene.add(pMesh);
+
+    this.particles.push({
+      mesh: pMesh,
+      velocity: new THREE.Vector3(0, Math.random() * 1.5 + 2.0, 0),
+      life: 0.35,
+      maxLife: 0.35,
+      type: 'hover' as any
+    });
   }
 
   private createHitParticles(pos: THREE.Vector3) {
@@ -3107,7 +3218,7 @@ class DemoGame {
         this.stamina = Math.min(this.maxStamina, this.stamina + dt * this.staminaRegenSpeed);
       }
 
-      const speed = (this.isHovering ? 7.2 : 4.0) * this.speedMultiplier;
+      const speed = (this.isHovering ? 9.0 : 4.0) * this.speedMultiplier;
 
       this.playerPos.addScaledVector(moveDirection, speed * dt);
 
@@ -3116,7 +3227,11 @@ class DemoGame {
       diff = Math.atan2(Math.sin(diff), Math.cos(diff));
       this.player.meshGroup.rotation.y += diff * 15 * dt;
 
-      this.player.animateWalk(speed, this.clock.getElapsedTime());
+      if (this.isHovering) {
+        this.player.animateWalk(0, 0); // Keep legs straight and aligned
+      } else {
+        this.player.animateWalk(speed, this.clock.getElapsedTime());
+      }
     } else {
       this.isHovering = false;
       this.stamina = Math.min(this.maxStamina, this.stamina + dt * this.staminaRegenSpeed);
@@ -3145,8 +3260,8 @@ class DemoGame {
       this.player.meshGroup.rotation.x = 0.15; // Lean forward
 
       // Spawn wind hover particles
-      if (Math.random() < 0.18) {
-        this.createSpawnParticles(new THREE.Vector3().copy(this.playerPos).add(new THREE.Vector3(0, 0.1, 0)));
+      if (Math.random() < 0.3) {
+        this.createHoverParticle(this.playerPos);
       }
     } else {
       this.player.meshGroup.position.copy(this.playerPos);
@@ -3262,29 +3377,38 @@ class DemoGame {
   }
 
   private updateSpawner(dt: number) {
-    const insideKingdom = Math.abs(this.playerPos.x) < 25 && Math.abs(this.playerPos.z) < 25;
-
-    const zBanner = document.getElementById('zone-banner')!;
-    if (insideKingdom) {
-      zBanner.innerText = '🏰 KINGDOM OF CLOVER (Safe Zone)';
-      zBanner.className = 'zone-banner zone-safe';
+    if (this.currentZone === 'kingdom') {
       document.getElementById('merchant-prompt')!.style.display = this.playerPos.distanceTo(this.merchantPos) < 3.0 ? 'block' : 'none';
 
       const mapTablePos = new THREE.Vector3(2.0, 0, 5.0);
       document.getElementById('map-prompt')!.style.display = this.playerPos.distanceTo(mapTablePos) < 3.0 ? 'block' : 'none';
+      return; 
+    }
+
+    // Grasslands or Forest zone spawning logic
+    // Show Return Portal prompt
+    const dist = this.playerPos.distanceTo(new THREE.Vector3(0, 0, 0));
+    const mapPrompt = document.getElementById('map-prompt')!;
+    if (dist < 2.5) {
+      mapPrompt.innerHTML = 'Return Portal <span style="color: #fff; background: #333; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; margin-left: 5px;">Press E</span>';
+      mapPrompt.style.display = 'block';
     } else {
-      zBanner.innerText = '🌲 CLOVER GRASSLANDS (Combat Zone)';
-      zBanner.className = 'zone-banner zone-combat';
-      document.getElementById('merchant-prompt')!.style.display = 'none';
-      document.getElementById('map-prompt')!.style.display = 'none';
+      mapPrompt.style.display = 'none';
+    }
 
-      if (this.spawnCountdown > 0) {
-        this.spawnCountdown -= dt;
-        document.getElementById('timer-val')!.innerText = this.spawnCountdown.toFixed(1);
+    // Auto-trigger next wave if all enemies are dead and countdown isn't running
+    const activeCount = this.goblins.filter((g) => !g.isDead).length + this.mages.filter((m) => !m.isDead).length + this.slimes.filter((s) => !s.isDead).length;
+    if (activeCount === 0 && this.spawnCountdown <= 0) {
+      this.spawnCountdown = 3.0;
+      document.getElementById('spawner-countdown')!.style.display = 'block';
+    }
 
-        if (this.spawnCountdown <= 0) {
-          this.spawnWave();
-        }
+    if (this.spawnCountdown > 0) {
+      this.spawnCountdown -= dt;
+      document.getElementById('timer-val')!.innerText = this.spawnCountdown.toFixed(1);
+
+      if (this.spawnCountdown <= 0) {
+        this.spawnWave();
       }
     }
   }
@@ -3316,7 +3440,9 @@ class DemoGame {
       const p = this.particles[i];
       p.life -= dt;
 
-      p.velocity.y += this.gravity * dt;
+      if (p.type !== ('hover' as any)) {
+        p.velocity.y += this.gravity * dt;
+      }
       p.mesh.position.addScaledVector(p.velocity, dt);
 
       p.mesh.rotation.x += 8 * dt;
@@ -3416,10 +3542,121 @@ class DemoGame {
 
     this.updateProjectiles(dt);
     this.updateParticles(dt);
+
+    // Update gold drops rotation & collection checks
+    for (let i = this.goldDrops.length - 1; i >= 0; i--) {
+      const drop = this.goldDrops[i];
+      drop.life -= dt;
+      drop.mesh.rotation.y += 2.0 * dt;
+
+      const dist = this.playerPos.distanceTo(drop.mesh.position);
+      if (dist < 1.2) {
+        this.gold += drop.amount;
+        this.createFloatingText(`+${drop.amount} Gold`, this.playerPos, '#ffd700');
+        sounds.playBuy(); // Play coin collection sound
+        this.scene.remove(drop.mesh);
+        drop.mesh.geometry.dispose();
+        (drop.mesh.material as any).dispose();
+        this.goldDrops.splice(i, 1);
+        this.updateHUD();
+      } else if (drop.life <= 0) {
+        this.scene.remove(drop.mesh);
+        drop.mesh.geometry.dispose();
+        (drop.mesh.material as any).dispose();
+        this.goldDrops.splice(i, 1);
+      }
+    }
+
+    if (this.returnPortal) {
+      this.returnPortal.rotation.z += 1.5 * dt;
+      this.returnPortal.rotation.y += 0.5 * dt;
+    }
+
     this.updateCamera(dt);
     this.updateSpawner(dt);
 
     this.renderer.render(this.scene, this.camera);
+  }
+
+  private switchZone(zone: 'kingdom' | 'grasslands' | 'forest') {
+    this.currentZone = zone;
+
+    // 1. Clear enemies and projectiles
+    this.goblins.forEach((g) => this.scene.remove(g.character.meshGroup));
+    this.mages.forEach((m) => this.scene.remove(m.character.meshGroup));
+    this.slimes.forEach((s) => this.scene.remove(s.meshGroup));
+    this.goblins = [];
+    this.mages = [];
+    this.slimes = [];
+
+    this.projectiles.forEach((p) => this.scene.remove(p.mesh));
+    this.projectiles = [];
+
+    this.goldDrops.forEach((d) => this.scene.remove(d.mesh));
+    this.goldDrops = [];
+
+    const zBanner = document.getElementById('zone-banner')!;
+
+    // 2. Hide/show groups
+    if (zone === 'kingdom') {
+      this.kingdomGroup.visible = true;
+      this.grasslandsGroup.visible = false;
+      this.merchant.meshGroup.visible = true;
+      if (this.returnPortal) {
+        this.scene.remove(this.returnPortal);
+        this.returnPortal = null;
+      }
+
+      zBanner.innerText = '🏰 KINGDOM OF CLOVER (Safe Zone)';
+      zBanner.className = 'zone-banner zone-safe';
+
+      // Reset lights/fog to bright morning
+      this.scene.fog = new THREE.FogExp2(0x0c0f12, 0.025);
+      this.renderer.setClearColor(0x0c0f12);
+      
+      this.playerPos.set(0, 0, 0);
+      this.player.meshGroup.position.set(0, 0, 0);
+      this.spawnCountdown = 0;
+      document.getElementById('spawner-countdown')!.style.display = 'none';
+    } else {
+      this.kingdomGroup.visible = false;
+      this.grasslandsGroup.visible = true;
+      this.merchant.meshGroup.visible = false;
+
+      // Spawn Return Portal at center (0, 0, 0)
+      if (!this.returnPortal) {
+        const portalGeo = new THREE.TorusGeometry(1.0, 0.12, 8, 24);
+        const portalMat = new THREE.MeshBasicMaterial({ color: 0x00ffcc, transparent: true, opacity: 0.8 });
+        this.returnPortal = new THREE.Mesh(portalGeo, portalMat);
+        this.returnPortal.position.set(0, 1.1, 0);
+        this.scene.add(this.returnPortal);
+      }
+
+      this.playerPos.set(0, 0, 4.0); // Spawn player slightly in front of portal
+      this.player.meshGroup.position.copy(this.playerPos);
+
+      // Start wave countdown
+      this.spawnCountdown = 3.0;
+      document.getElementById('spawner-countdown')!.style.display = 'block';
+
+      if (zone === 'forest') {
+        zBanner.innerText = '🧙‍♀️ WITCH\'S FOREST (Combat Zone)';
+        zBanner.className = 'zone-banner zone-combat';
+
+        // Deep spooky purple fog and lighting
+        this.scene.fog = new THREE.FogExp2(0x1a0f30, 0.045);
+        this.renderer.setClearColor(0x1a0f30);
+      } else {
+        zBanner.innerText = '🌲 CLOVER GRASSLANDS (Combat Zone)';
+        zBanner.className = 'zone-banner zone-combat';
+
+        // Standard grasslands morning fog
+        this.scene.fog = new THREE.FogExp2(0x0c0f12, 0.025);
+        this.renderer.setClearColor(0x0c0f12);
+      }
+    }
+
+    this.updateHUD();
   }
 
   private getActiveEnemies(): any[] {
