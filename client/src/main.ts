@@ -1192,7 +1192,7 @@ class DemoGame {
       }
       .spellbook-book {
         background: #3e2723; border: 10px solid #d4af37; border-radius: 20px;
-        display: flex; width: 850px; height: 550px; box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+        display: flex; width: 1200px; height: 550px; box-shadow: 0 20px 50px rgba(0,0,0,0.8);
         overflow: hidden;
       }
       .spellbook-page {
@@ -1206,6 +1206,50 @@ class DemoGame {
       .spell-card-name { font-weight: bold; font-size: 1.05rem; }
       .spell-card-binding { font-size: 0.8rem; font-style: italic; color: #6d4c41; }
       .spell-card-desc { font-size: 0.85rem; margin-top: 3px; }
+      .inventory-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+        margin-top: 15px;
+      }
+      .inventory-slot {
+        aspect-ratio: 1;
+        background: rgba(0,0,0,0.06);
+        border: 2px dashed rgba(62,39,35,0.4);
+        border-radius: 8px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 1.5rem;
+        cursor: pointer;
+        position: relative;
+        transition: all 0.15s ease;
+      }
+      .inventory-slot:hover {
+        background: rgba(62,39,35,0.08);
+        border-color: #3e2723;
+      }
+      .inventory-slot-tooltip {
+        position: absolute;
+        bottom: 110%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0,0,0,0.9);
+        color: #fff;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.15s;
+        z-index: 10;
+        font-family: sans-serif;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+      }
+      .inventory-slot:hover .inventory-slot-tooltip {
+        opacity: 1;
+      }
 
       .mmo-hotbar {
         position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
@@ -1841,6 +1885,13 @@ class DemoGame {
             <div id="sb-spells-list">
             </div>
           </div>
+
+          <!-- Page 3 (Inventory next to Spellbook) -->
+          <div class="spellbook-page">
+            <div class="spellbook-title">BAG INVENTORY</div>
+            <div class="inventory-grid" id="sb-inventory-grid">
+            </div>
+          </div>
         </div>
       </div>
 
@@ -2205,6 +2256,63 @@ class DemoGame {
     };
 
     document.getElementById('sb-spells-list')!.innerHTML = spellTexts[this.magicAttribute];
+
+    // Update inventory grid
+    const invGrid = document.getElementById('sb-inventory-grid')!;
+    if (invGrid) {
+      invGrid.innerHTML = '';
+
+      const inventoryItems: { icon: string; name: string; desc: string }[] = [];
+
+      // Add gold pile
+      inventoryItems.push({ icon: '🪙', name: `${this.gold} Gold`, desc: 'Currency spent at the Relic Shop.' });
+
+      // Add Grimoire item
+      let gName = '3-Leaf Grimoire', gDesc = 'Basic spellbook';
+      let gIcon = '📜';
+      if (this.grimoireType === '5-leaf') { gName = '5-Leaf Grimoire'; gDesc = 'Harbors a devil'; gIcon = '😈'; }
+      if (this.grimoireType === '4-leaf') { gName = '4-Leaf Grimoire'; gDesc = 'Legendary luck'; gIcon = '🍀'; }
+      inventoryItems.push({ icon: gIcon, name: gName, desc: gDesc });
+
+      // Add badge based on high score
+      let rank = 'Recruit Badge';
+      let rankIcon = '🎖️';
+      if (this.highscore > 50) { rank = 'Magic Captain Badge'; rankIcon = '👑'; }
+      else if (this.highscore > 20) { rank = 'Senior Knight Badge'; rankIcon = '🛡️'; }
+      inventoryItems.push({ icon: rankIcon, name: rank, desc: `Rank earned from high score (${this.highscore} kills).` });
+
+      // Add active relics
+      this.activeRelics.forEach((relic) => {
+        let icon = '📦';
+        let desc = 'Magical artifact';
+        if (relic === 'Amulet of Life') { icon = '❤️'; desc = '+50 Max Health'; }
+        if (relic === 'Sorcerer Ring') { icon = '⚡'; desc = '+100% Spell Power'; }
+        if (relic === 'Swift Boots') { icon = '🏃'; desc = '+20% Speed'; }
+        inventoryItems.push({ icon, name: relic, desc });
+      });
+
+      // Add some persistent theme items
+      inventoryItems.push({ icon: '🧪', name: 'Witch\'s Brew', desc: 'Smells of wild mushrooms.' });
+      inventoryItems.push({ icon: '🧭', name: 'Zone Compass', desc: 'Allows fast map travel.' });
+
+      // Create 16 slots total
+      for (let i = 0; i < 16; i++) {
+        const slot = document.createElement('div');
+        slot.className = 'inventory-slot';
+        if (i < inventoryItems.length) {
+          const item = inventoryItems[i];
+          slot.innerText = item.icon;
+          
+          const tooltip = document.createElement('div');
+          tooltip.className = 'inventory-slot-tooltip';
+          tooltip.innerHTML = `<strong>${item.name}</strong><br/>${item.desc}`;
+          slot.appendChild(tooltip);
+        } else {
+          slot.innerHTML = '<span style="color: rgba(62,39,35,0.25); font-size: 0.8rem;">Empty</span>';
+        }
+        invGrid.appendChild(slot);
+      }
+    }
   }
 
   private toggleSpellbook() {
