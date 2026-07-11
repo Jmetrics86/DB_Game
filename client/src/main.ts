@@ -897,7 +897,7 @@ class DemoGame {
         position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
         background: rgba(10, 12, 16, 0.95); display: flex; flex-direction: column;
         justify-content: center; align-items: center; z-index: 100; backdrop-filter: blur(15px);
-        font-family: sans-serif;
+        font-family: sans-serif; pointer-events: auto;
       }
       .selection-box {
         background: rgba(25, 30, 40, 0.85); border: 2px solid rgba(255, 255, 255, 0.1);
