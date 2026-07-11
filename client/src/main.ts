@@ -864,6 +864,11 @@ class DemoGame {
   private isSpellbookOpen = false;
   private isShopOpen = false;
   private isPaused = false;
+  private isTravelOpen = false;
+
+  // Obstacles for Collisions
+  private obstacleBoxes: { xMin: number; xMax: number; zMin: number; zMax: number }[] = [];
+  private obstacleCircles: { x: number; z: number; radius: number }[] = [];
 
   // Spawners & Zone Management
   private goblinsToSpawnNext = 1;
@@ -880,6 +885,7 @@ class DemoGame {
 
   constructor() {
     this.injectStyles();
+    this.initObstacles();
     this.initScene();
     this.initLights();
     this.initEnvironment();
@@ -1214,6 +1220,28 @@ class DemoGame {
     table.castShadow = true; table.receiveShadow = true;
     this.scene.add(table);
 
+    // Map Table next to Merchant
+    const mapTablePos = new THREE.Vector3(2.0, 0, 5.0);
+    const mTable = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.9, 1.5), new THREE.MeshStandardMaterial({ color: 0x4a2711, roughness: 0.9 }));
+    mTable.position.copy(mapTablePos).add(new THREE.Vector3(0, 0.45, 0));
+    mTable.castShadow = true; mTable.receiveShadow = true;
+    this.scene.add(mTable);
+
+    // Parchment map rolled out on table
+    const mapParchment = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.04, 1.2), new THREE.MeshStandardMaterial({ color: 0xf5eccd, roughness: 0.9 }));
+    mapParchment.position.copy(mapTablePos).add(new THREE.Vector3(0, 0.92, 0));
+    mapParchment.castShadow = true;
+    this.scene.add(mapParchment);
+
+    // Visual indicators/miniatures on the map
+    const miniKingdom = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.15, 0.2), new THREE.MeshStandardMaterial({ color: 0x3e4a56 }));
+    miniKingdom.position.copy(mapTablePos).add(new THREE.Vector3(-0.3, 0.95, -0.2));
+    this.scene.add(miniKingdom);
+
+    const miniGrasslands = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.2), new THREE.MeshStandardMaterial({ color: 0x558b2f }));
+    miniGrasslands.position.copy(mapTablePos).add(new THREE.Vector3(0.2, 0.95, 0.2));
+    this.scene.add(miniGrasslands);
+
     // Paved path to South Gate
     const gatePath = new THREE.Mesh(new THREE.PlaneGeometry(8, 25), kingdomRoadMat);
     gatePath.rotation.x = -Math.PI / 2;
@@ -1251,6 +1279,8 @@ class DemoGame {
 
       treeGroup.position.set(x, 0, z);
       this.scene.add(treeGroup);
+
+      this.obstacleCircles.push({ x, z, radius: 0.4 });
     }
   }
 
@@ -1302,8 +1332,8 @@ class DemoGame {
         this.isJumping = true;
       }
 
-      // Toggle Spellbook
-      if (e.key === 'tab') {
+      // Toggle Spellbook (using 'K' instead of 'Tab' for browser compatibility)
+      if (key === 'k') {
         e.preventDefault();
         this.toggleSpellbook();
       }
@@ -1316,12 +1346,22 @@ class DemoGame {
         }
       }
 
+      // Travel Map Interact
+      if (key === 'm') {
+        const dist = this.playerPos.distanceTo(new THREE.Vector3(2.0, 0, 5.0));
+        if (dist < 3.0) {
+          this.toggleTravel();
+        }
+      }
+
       // Escape close all UI
       if (e.key === 'Escape') {
         this.isSpellbookOpen = false;
         document.getElementById('spellbook-overlay')!.style.display = 'none';
         this.isShopOpen = false;
         document.getElementById('shop-overlay')!.style.display = 'none';
+        this.isTravelOpen = false;
+        document.getElementById('travel-overlay')!.style.display = 'none';
         if (this.isPaused) {
           this.togglePause();
         }
@@ -1416,7 +1456,7 @@ class DemoGame {
         <div style="margin-top: 10px;">Gold / Shards: <span id="gold-val" style="color: #f9d423; font-weight: bold;">0</span></div>
         <div>Active Goblins & Mages: <span id="goblins-active-val" style="color: #76b041;">0</span></div>
         <div>Current Wave: <span id="wave-val" style="color: #ff4b2b;">1</span></div>
-        <div style="color: #ccc; font-size: 0.85rem; margin-top: 5px; font-style: italic;">Press TAB to inspect Spellbook</div>
+        <div style="color: #ccc; font-size: 0.85rem; margin-top: 5px; font-style: italic;">Press K to inspect Spellbook</div>
       </div>
 
       <!-- Spawner warning -->
@@ -1453,7 +1493,7 @@ class DemoGame {
         </div>
         <div class="hotbar-slot" id="slot-spellbook">
           <div class="hotbar-icon">📖</div>
-          <div class="hotbar-key">Tab</div>
+          <div class="hotbar-key">K</div>
           <div class="hotbar-name">Spellbook Menu</div>
         </div>
       </div>
@@ -1461,6 +1501,11 @@ class DemoGame {
       <!-- Interactive Merchant Prompt -->
       <div class="merchant-prompt" id="merchant-prompt" style="display: none;">
         Merchant Pedestal <span style="color: #fff; background: #333; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; margin-left: 5px;">Press E</span>
+      </div>
+
+      <!-- Interactive Map Table Prompt -->
+      <div class="merchant-prompt" id="map-prompt" style="display: none;">
+        Map Table <span style="color: #fff; background: #333; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; margin-left: 5px;">Press M</span>
       </div>
 
       <!-- Relic Shop Overlay -->
@@ -1541,6 +1586,20 @@ class DemoGame {
         <h1 style="font-size: 3.5rem; margin: 0 0 10px 0; color: #00ffcc; text-shadow: 0 0 20px rgba(0,255,204,0.4);">GAME PAUSED</h1>
         <p style="font-size: 1.2rem; margin: 0 0 30px 0; color: #a8b2c1;">Press = or ESCAPE to resume</p>
         <button id="resume-btn" style="background: linear-gradient(45deg, #00ffcc, #0077ff); border: none; color: #111; padding: 12px 35px; font-size: 1.1rem; border-radius: 25px; cursor: pointer; font-weight: bold; box-shadow: 0 5px 15px rgba(0,255,204,0.3); transition: transform 0.2s;">RESUME</button>
+      </div>
+
+      <!-- Travel Map Overlay -->
+      <div class="shop-overlay" id="travel-overlay" style="display: none;">
+        <div class="shop-container" style="position: relative; max-width: 500px;">
+          <button class="close-x-btn" id="travel-close-x">&times;</button>
+          <h2 style="margin:0; font-size:2rem; color:#00ffcc;">Kingdom Travel Map</h2>
+          <p style="color:#a8b2c1; margin-top:5px;">Select a zone to travel to instantly.</p>
+          <div class="shop-cards" style="flex-direction: column; gap: 15px; margin-top: 25px;">
+            <button class="start-game-btn" id="travel-kingdom" style="margin: 0; width: 100%; box-shadow: none; font-size: 1.1rem; background: linear-gradient(45deg, #00ffcc, #0077ff); color: #111;">🏰 Kingdom Square (Safe)</button>
+            <button class="start-game-btn" id="travel-grasslands" style="margin: 0; width: 100%; box-shadow: none; font-size: 1.1rem; background: linear-gradient(45deg, #ff4b2b, #ff416c); color: #fff;">🌲 Clover Grasslands (Danger)</button>
+            <button class="start-game-btn" id="travel-forest" style="margin: 0; width: 100%; box-shadow: none; font-size: 1.1rem; background: linear-gradient(45deg, #9c27b0, #e040fb); color: #fff;">🧙‍♀️ Witch's Forest (Combat Corner)</button>
+          </div>
+        </div>
       </div>
 
       <!-- Dynamic Zone Indicator -->
@@ -1665,6 +1724,22 @@ class DemoGame {
 
     document.getElementById('resume-btn')!.addEventListener('click', () => {
       this.togglePause();
+    });
+
+    document.getElementById('travel-close-x')!.addEventListener('click', () => {
+      this.toggleTravel();
+    });
+
+    document.getElementById('travel-kingdom')!.addEventListener('click', () => {
+      this.teleportPlayer(new THREE.Vector3(0, 0, 0), '🏰 Kingdom Square!');
+    });
+
+    document.getElementById('travel-grasslands')!.addEventListener('click', () => {
+      this.teleportPlayer(new THREE.Vector3(0, 0, 32), '🌲 Clover Grasslands!');
+    });
+
+    document.getElementById('travel-forest')!.addEventListener('click', () => {
+      this.teleportPlayer(new THREE.Vector3(45, 0, -45), '🧙‍♀️ Witch\'s Forest!');
     });
 
     document.getElementById('restart-btn')!.addEventListener('click', () => {
@@ -1885,7 +1960,33 @@ class DemoGame {
       document.getElementById('spellbook-overlay')!.style.display = 'none';
       this.isShopOpen = false;
       document.getElementById('shop-overlay')!.style.display = 'none';
+      this.isTravelOpen = false;
+      document.getElementById('travel-overlay')!.style.display = 'none';
     }
+  }
+
+  private toggleTravel() {
+    if (!this.gameStarted || this.playerHealth <= 0) return;
+    this.isTravelOpen = !this.isTravelOpen;
+    const el = document.getElementById('travel-overlay')!;
+    el.style.display = this.isTravelOpen ? 'flex' : 'none';
+    if (this.isTravelOpen) {
+      this.isSpellbookOpen = false;
+      document.getElementById('spellbook-overlay')!.style.display = 'none';
+      this.isShopOpen = false;
+      document.getElementById('shop-overlay')!.style.display = 'none';
+      this.isPaused = false;
+      document.getElementById('pause-overlay')!.style.display = 'none';
+    }
+  }
+
+  private teleportPlayer(targetPos: THREE.Vector3, zoneName: string) {
+    this.playerPos.copy(targetPos);
+    this.player.meshGroup.position.copy(targetPos);
+    this.createSpawnParticles(targetPos);
+    this.createFloatingText(zoneName, targetPos, '#00ffcc');
+    sounds.playSpellCast();
+    this.toggleTravel();
   }
 
   // ==========================================
@@ -2630,9 +2731,11 @@ class DemoGame {
     document.getElementById('shop-overlay')!.style.display = 'none';
     document.getElementById('spellbook-overlay')!.style.display = 'none';
     document.getElementById('pause-overlay')!.style.display = 'none';
+    document.getElementById('travel-overlay')!.style.display = 'none';
     this.isShopOpen = false;
     this.isSpellbookOpen = false;
     this.isPaused = false;
+    this.isTravelOpen = false;
 
     this.updateHUD();
     this.updateSpellbookContent();
@@ -2773,6 +2876,9 @@ class DemoGame {
       this.isJumping = false;
     }
 
+    // Resolve building/tree collisions
+    this.resolveObstacleCollisions(this.playerPos, 0.5);
+
     this.playerPos.x = Math.max(-this.boundaries, Math.min(this.boundaries, this.playerPos.x));
     this.playerPos.z = Math.max(-this.boundaries, Math.min(this.boundaries, this.playerPos.z));
 
@@ -2894,10 +3000,14 @@ class DemoGame {
       zBanner.innerText = '🏰 KINGDOM OF CLOVER (Safe Zone)';
       zBanner.className = 'zone-banner zone-safe';
       document.getElementById('merchant-prompt')!.style.display = this.playerPos.distanceTo(this.merchantPos) < 3.0 ? 'block' : 'none';
+
+      const mapTablePos = new THREE.Vector3(2.0, 0, 5.0);
+      document.getElementById('map-prompt')!.style.display = this.playerPos.distanceTo(mapTablePos) < 3.0 ? 'block' : 'none';
     } else {
       zBanner.innerText = '🌲 CLOVER GRASSLANDS (Combat Zone)';
       zBanner.className = 'zone-banner zone-combat';
       document.getElementById('merchant-prompt')!.style.display = 'none';
+      document.getElementById('map-prompt')!.style.display = 'none';
 
       if (this.spawnCountdown > 0) {
         this.spawnCountdown -= dt;
@@ -3014,6 +3124,7 @@ class DemoGame {
 
     this.goblins.forEach((g) => {
       g.update(dt, this.playerPos);
+      this.resolveObstacleCollisions(g.position, 0.4);
     });
 
     this.mages.forEach((m) => {
@@ -3021,6 +3132,7 @@ class DemoGame {
         const dir = new THREE.Vector3().subVectors(target, start).normalize();
         this.spawnProjectile(start, dir.multiplyScalar(8), 12, 'fire', true);
       });
+      this.resolveObstacleCollisions(m.position, 0.4);
     });
 
     this.updateProjectiles(dt);
@@ -3029,6 +3141,82 @@ class DemoGame {
     this.updateSpawner(dt);
 
     this.renderer.render(this.scene, this.camera);
+  }
+
+  private initObstacles() {
+    this.obstacleBoxes = [];
+    this.obstacleCircles = [];
+
+    // 1. Town Houses
+    this.obstacleBoxes.push({ xMin: -16.2, xMax: -11.8, zMin: -14.2, zMax: -9.8 });
+    this.obstacleBoxes.push({ xMin: -17.2, xMax: -12.8, zMin: 7.3, zMax: 12.7 });
+    this.obstacleBoxes.push({ xMin: 11.3, xMax: 16.7, zMin: -12.2, zMax: -7.8 });
+
+    // 2. Merchant Table
+    this.obstacleBoxes.push({ xMin: 3.8, xMax: 6.2, zMin: 5.2, zMax: 6.8 });
+
+    // 3. Map Table next to Merchant
+    this.obstacleBoxes.push({ xMin: 1.0, xMax: 3.0, zMin: 4.0, zMax: 6.0 });
+
+    // 4. Corner Watchtowers
+    this.obstacleBoxes.push({ xMin: -27.0, xMax: -23.0, zMin: -27.0, zMax: -23.0 });
+    this.obstacleBoxes.push({ xMin: 23.0, xMax: 27.0, zMin: -27.0, zMax: -23.0 });
+    this.obstacleBoxes.push({ xMin: -27.0, xMax: -23.0, zMin: 23.0, zMax: 27.0 });
+    this.obstacleBoxes.push({ xMin: 23.0, xMax: 27.0, zMin: 23.0, zMax: 27.0 });
+
+    // 5. Castle Walls
+    this.obstacleBoxes.push({ xMin: -26.25, xMax: 26.25, zMin: -26.25, zMax: -23.75 });
+    this.obstacleBoxes.push({ xMin: -26.25, xMax: -23.75, zMin: -26.25, zMax: 26.25 });
+    this.obstacleBoxes.push({ xMin: 23.75, xMax: 26.25, zMin: -26.25, zMax: 26.25 });
+    this.obstacleBoxes.push({ xMin: -26.25, xMax: -4.0, zMin: 23.75, zMax: 26.25 });
+    this.obstacleBoxes.push({ xMin: 4.0, xMax: 26.25, zMin: 23.75, zMax: 26.25 });
+  }
+
+  private resolveObstacleCollisions(pos: THREE.Vector3, radius = 0.5) {
+    let px = pos.x;
+    let pz = pos.z;
+
+    for (const c of this.obstacleCircles) {
+      const dx = px - c.x;
+      const dz = pz - c.z;
+      const distSq = dx * dx + dz * dz;
+      const minDist = c.radius + radius;
+      if (distSq < minDist * minDist) {
+        const dist = Math.sqrt(distSq);
+        if (dist > 0) {
+          px += (dx / dist) * (minDist - dist);
+          pz += (dz / dist) * (minDist - dist);
+        }
+      }
+    }
+
+    for (const b of this.obstacleBoxes) {
+      const cx = Math.max(b.xMin, Math.min(px, b.xMax));
+      const cz = Math.max(b.zMin, Math.min(pz, b.zMax));
+      const dx = px - cx;
+      const dz = pz - cz;
+      const distSq = dx * dx + dz * dz;
+      if (distSq < radius * radius) {
+        if (distSq > 0) {
+          const dist = Math.sqrt(distSq);
+          px += (dx / dist) * (radius - dist);
+          pz += (dz / dist) * (radius - dist);
+        } else {
+          const leftDist = px - b.xMin;
+          const rightDist = b.xMax - px;
+          const topDist = pz - b.zMin;
+          const bottomDist = b.zMax - pz;
+          const minDist = Math.min(leftDist, rightDist, topDist, bottomDist);
+          if (minDist === leftDist) px = b.xMin - radius;
+          else if (minDist === rightDist) px = b.xMax + radius;
+          else if (minDist === topDist) pz = b.zMin - radius;
+          else pz = b.zMax + radius;
+        }
+      }
+    }
+
+    pos.x = px;
+    pos.z = pz;
   }
 
   private onWindowResize() {
