@@ -649,6 +649,8 @@ class Goblin {
     this.isDead = true;
     this.setMaterialColor(0xaa0000);
     sounds.playDeath();
+    const event = new CustomEvent('enemyDefeated', { detail: { enemy: this } });
+    window.dispatchEvent(event);
   }
 }
 
@@ -785,6 +787,167 @@ class Mage {
     this.isDead = true;
     this.setMaterialColor(0xaa0000);
     sounds.playDeath();
+    const event = new CustomEvent('enemyDefeated', { detail: { enemy: this } });
+    window.dispatchEvent(event);
+  }
+}
+
+// ==========================================
+// Slime Class (Hopping Melee Attacker)
+// ==========================================
+class Slime {
+  meshGroup: THREE.Group;
+  bodyMesh: THREE.Mesh;
+  health: number = 40;
+  maxHealth: number = 40;
+  isDead: boolean = false;
+  position: THREE.Vector3 = new THREE.Vector3();
+  flashTimer: number = 0;
+  attackCooldown: number = 0;
+  knockback: THREE.Vector3 = new THREE.Vector3();
+  isFrozen = false;
+  freezeTimer = 0;
+
+  // Jump physics
+  private velY: number = 0;
+  private isGrounded: boolean = true;
+  private jumpTimer: number = 0;
+
+  constructor(spawnPos: THREE.Vector3) {
+    this.meshGroup = new THREE.Group();
+    this.position.copy(spawnPos);
+    this.meshGroup.position.copy(spawnPos);
+
+    // Green translucent body
+    const bodyGeo = new THREE.CylinderGeometry(0.5, 0.6, 0.5, 8);
+    const bodyMat = new THREE.MeshStandardMaterial({
+      color: 0x4caf50,
+      transparent: true,
+      opacity: 0.75,
+      roughness: 0.2,
+      metalness: 0.1
+    });
+    this.bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+    this.bodyMesh.position.y = 0.25;
+    this.bodyMesh.castShadow = true;
+    this.bodyMesh.receiveShadow = true;
+    this.meshGroup.add(this.bodyMesh);
+
+    // Cute glowing yellow eyes
+    const eyeGeo = new THREE.BoxGeometry(0.12, 0.08, 0.08);
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffeb3b, emissive: 0xff9800 });
+    const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+    leftEye.position.set(-0.18, 0.28, 0.45);
+    const rightEye = leftEye.clone();
+    rightEye.position.x = 0.18;
+    this.meshGroup.add(leftEye);
+    this.meshGroup.add(rightEye);
+  }
+
+  takeDamage(amount: number, dir: THREE.Vector3) {
+    if (this.isDead) return;
+    this.health = Math.max(0, this.health - amount);
+    this.flashTimer = 0.15;
+    this.knockback.copy(dir).multiplyScalar(10);
+    this.setEmissiveColor(0xff3333);
+    sounds.playHit();
+    if (this.health <= 0) {
+      this.die();
+    }
+  }
+
+  private setEmissiveColor(colorHex: number) {
+    (this.bodyMesh.material as THREE.MeshStandardMaterial).emissive?.setHex(colorHex);
+  }
+
+  update(dt: number, playerPos: THREE.Vector3, onDamagePlayer: () => void) {
+    if (this.isDead) {
+      this.meshGroup.rotation.z += 5 * dt;
+      this.meshGroup.position.y -= 2 * dt;
+      return;
+    }
+
+    if (this.isFrozen) {
+      this.freezeTimer -= dt;
+      this.setEmissiveColor(0x0044ff);
+      if (this.freezeTimer <= 0) {
+        this.isFrozen = false;
+        this.setEmissiveColor(0x000000);
+      }
+      return;
+    }
+
+    if (this.flashTimer > 0) {
+      this.flashTimer -= dt;
+      if (this.flashTimer <= 0) {
+        this.setEmissiveColor(0x000000);
+      }
+    }
+
+    if (this.attackCooldown > 0) {
+      this.attackCooldown -= dt;
+    }
+
+    // Apply knockback
+    this.position.addScaledVector(this.knockback, dt);
+    this.knockback.multiplyScalar(Math.exp(-10 * dt));
+
+    // Slime Jump AI
+    if (this.isGrounded) {
+      this.jumpTimer -= dt;
+      // Squish animation on ground
+      this.bodyMesh.scale.y = 1.0 + Math.sin(Date.now() * 0.008) * 0.08;
+      this.bodyMesh.scale.x = 1.0 - Math.sin(Date.now() * 0.008) * 0.08;
+      this.bodyMesh.scale.z = 1.0 - Math.sin(Date.now() * 0.008) * 0.08;
+
+      if (this.jumpTimer <= 0) {
+        this.isGrounded = false;
+        this.velY = 4.0; // Jump force
+        this.jumpTimer = Math.random() * 1.5 + 1.0;
+      }
+    } else {
+      // In air physics
+      this.velY -= 9.8 * dt;
+      this.position.y += this.velY * dt;
+
+      // Stretch animation in air
+      this.bodyMesh.scale.set(0.85, 1.25, 0.85);
+
+      // Move horizontally towards player
+      const toPlayer = new THREE.Vector3().subVectors(playerPos, this.position);
+      toPlayer.y = 0;
+      const dist = toPlayer.length();
+      if (dist > 0.1) {
+        toPlayer.normalize();
+        this.meshGroup.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
+        this.position.addScaledVector(toPlayer, 3.5 * dt);
+      }
+
+      if (this.position.y <= 0) {
+        this.position.y = 0;
+        this.velY = 0;
+        this.isGrounded = true;
+        this.bodyMesh.scale.set(1.1, 0.8, 1.1); // land squish impact
+      }
+    }
+
+    // Check contact damage
+    const toPlayer = new THREE.Vector3().subVectors(playerPos, this.position);
+    toPlayer.y = 0;
+    if (toPlayer.length() < 0.8 && this.attackCooldown <= 0) {
+      this.attackCooldown = 1.0;
+      onDamagePlayer();
+    }
+
+    this.meshGroup.position.copy(this.position);
+  }
+
+  die() {
+    this.isDead = true;
+    this.setEmissiveColor(0xaa0000);
+    sounds.playHurt();
+    const event = new CustomEvent('enemyDefeated', { detail: { enemy: this } });
+    window.dispatchEvent(event);
   }
 }
 
@@ -806,8 +969,20 @@ class DemoGame {
 
   private goblins: Goblin[] = [];
   private mages: Mage[] = [];
+  private slimes: Slime[] = [];
   private merchant!: CubistCharacter;
   private merchantPos = new THREE.Vector3(5, 0, 5);
+
+  // Mana System
+  private playerMaxMana = 100;
+  private playerMana = 100;
+  private manaRegenRate = 8;
+
+  // Stamina & Hover
+  private maxStamina = 3.0;
+  private stamina = 3.0;
+  private staminaRegenSpeed = 1.0;
+  private isHovering = false;
 
   // Physics/Controls
   private keys: Record<string, boolean> = {};
@@ -1413,6 +1588,21 @@ class DemoGame {
       const goblin = e.detail.goblin as Goblin;
       this.handlePlayerHurt(goblin.position, 10);
     });
+
+    window.addEventListener('enemyDefeated', (e: any) => {
+      const enemy = e.detail.enemy;
+      this.score++;
+      let goldReward = 15;
+      if (enemy.maxHealth === 80) {
+        goldReward = 35; // Mage
+      } else if (enemy.maxHealth === 40) {
+        goldReward = 10; // Slime
+      }
+      this.gold += goldReward;
+      this.createFloatingText('DEFEATED!', enemy.position, '#f9d423');
+      this.updateHUD();
+      this.checkWaveCompletion();
+    });
   }
 
   private initUI() {
@@ -1449,10 +1639,25 @@ class DemoGame {
       <div class="hud-panel" id="player-hud" style="display: none; align-self: flex-start; z-index: 5;">
         <h1 id="hud-title">WIZARD KNIGHT</h1>
         <div>Grimoire: <span id="hud-grimoire-type" style="color: #f9d423; font-weight: bold;">-</span></div>
-        <div>Health: <span id="health-val">100</span> / <span id="maxhealth-val">100</span></div>
-        <div class="health-bar-container">
-          <div class="health-bar" id="player-health" style="width: 100%"></div>
+        
+        <!-- Health Bar -->
+        <div style="margin-top: 5px;">Health: <span id="health-val">100</span> / <span id="maxhealth-val">100</span></div>
+        <div class="health-bar-container" style="width: 100%; height: 10px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-top: 2px;">
+          <div class="health-bar" id="player-health" style="width: 100%; height: 100%; background: #ff4b2b;"></div>
         </div>
+
+        <!-- Mana Bar -->
+        <div style="margin-top: 5px;">Mana: <span id="mana-val">100</span> / <span id="maxmana-val">100</span></div>
+        <div class="health-bar-container" style="width: 100%; height: 10px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-top: 2px;">
+          <div class="health-bar" id="player-mana" style="width: 100%; height: 100%; background: #2f80ed;"></div>
+        </div>
+
+        <!-- Stamina Bar -->
+        <div style="margin-top: 5px;">Stamina: <span id="stamina-val">3.0</span>s</div>
+        <div class="health-bar-container" style="width: 100%; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-top: 2px;">
+          <div class="health-bar" id="player-stamina" style="width: 100%; height: 100%; background: #00bcd4;"></div>
+        </div>
+
         <div style="margin-top: 10px;">Gold / Shards: <span id="gold-val" style="color: #f9d423; font-weight: bold;">0</span></div>
         <div>Active Goblins & Mages: <span id="goblins-active-val" style="color: #76b041;">0</span></div>
         <div>Current Wave: <span id="wave-val" style="color: #ff4b2b;">1</span></div>
@@ -2008,6 +2213,11 @@ class DemoGame {
 
   private castBasic() {
     if (this.cooldowns.basic > 0) return;
+    if (this.playerMana < 5) {
+      this.createFloatingText('OUT OF MANA', this.playerPos, '#2f80ed');
+      return;
+    }
+    this.playerMana -= 5;
     this.cooldowns.basic = this.maxCooldowns.basic;
 
     this.triggerCastEffect();
@@ -2030,6 +2240,11 @@ class DemoGame {
 
   private castCombo() {
     if (this.cooldowns.combo > 0) return;
+    if (this.playerMana < 15) {
+      this.createFloatingText('OUT OF MANA', this.playerPos, '#2f80ed');
+      return;
+    }
+    this.playerMana -= 15;
     this.cooldowns.combo = this.maxCooldowns.combo;
 
     this.triggerCastEffect();
@@ -2068,6 +2283,11 @@ class DemoGame {
 
   private castSkill() {
     if (this.cooldowns.skill > 0) return;
+    if (this.playerMana < 30) {
+      this.createFloatingText('OUT OF MANA', this.playerPos, '#2f80ed');
+      return;
+    }
+    this.playerMana -= 30;
     this.cooldowns.skill = this.maxCooldowns.skill;
 
     this.triggerCastEffect();
@@ -2098,6 +2318,11 @@ class DemoGame {
 
   private castUltimate() {
     if (this.cooldowns.ultimate > 0) return;
+    if (this.playerMana < 50) {
+      this.createFloatingText('OUT OF MANA', this.playerPos, '#2f80ed');
+      return;
+    }
+    this.playerMana -= 50;
     this.cooldowns.ultimate = this.maxCooldowns.ultimate;
 
     this.triggerCastEffect();
@@ -2276,7 +2501,7 @@ class DemoGame {
     };
     animateSlash();
 
-    this.goblins.concat(this.mages as any).forEach((enemy: any) => {
+    this.getActiveEnemies().forEach((enemy: any) => {
       if (enemy.isDead) return;
       const dist = swipeCenter.distanceTo(enemy.position);
       if (dist < 2.0) {
@@ -2286,7 +2511,6 @@ class DemoGame {
         enemy.takeDamage(totalDmg, knockbackDir);
         this.createHitParticles(enemy.position);
         this.createFloatingText(`-${totalDmg}`, enemy.position, '#4caf50');
-        this.checkWaveCompletion();
       }
     });
   }
@@ -2315,7 +2539,7 @@ class DemoGame {
     };
     animateSweep();
 
-    this.goblins.concat(this.mages as any).forEach((enemy: any) => {
+    this.getActiveEnemies().forEach((enemy: any) => {
       if (enemy.isDead) return;
       const dist = this.playerPos.distanceTo(enemy.position);
       if (dist < 4.0) {
@@ -2325,7 +2549,6 @@ class DemoGame {
         enemy.takeDamage(totalDmg, knockbackDir);
         this.createHitParticles(enemy.position);
         this.createFloatingText(`-${totalDmg}`, enemy.position, '#000000');
-        this.checkWaveCompletion();
       }
     });
   }
@@ -2342,7 +2565,7 @@ class DemoGame {
       }
       this.createSpawnParticles(this.playerPos);
       
-      this.goblins.concat(this.mages as any).forEach((enemy: any) => {
+      this.getActiveEnemies().forEach((enemy: any) => {
         if (enemy.isDead) return;
         const dist = this.playerPos.distanceTo(enemy.position);
         if (dist < 2.0) {
@@ -2350,7 +2573,6 @@ class DemoGame {
           const totalDmg = Math.round(30 * this.magicPowerMultiplier);
           enemy.takeDamage(totalDmg, knockbackDir);
           this.createFloatingText(`-${totalDmg}`, enemy.position, '#4caf50');
-          this.checkWaveCompletion();
         }
       });
     }, 40);
@@ -2400,16 +2622,19 @@ class DemoGame {
     };
     anim();
 
-    this.goblins.concat(this.mages as any).forEach((enemy: any) => {
+    this.getActiveEnemies().forEach((enemy: any, index: number) => {
       if (enemy.isDead) return;
       const dist = this.playerPos.distanceTo(enemy.position);
       if (dist < 12.0) {
-        enemy.isFrozen = true;
-        enemy.freezeTimer = 4.0;
-        const totalDmg = Math.round(55 * this.magicPowerMultiplier);
-        enemy.takeDamage(totalDmg, new THREE.Vector3(0, 0.1, 0));
-        this.createFloatingText(`FROZEN! -${totalDmg}`, enemy.position, '#00e5ff');
-        this.checkWaveCompletion();
+        setTimeout(() => {
+          if (enemy.isDead || this.playerHealth <= 0) return;
+          const totalDmg = Math.round(15 * this.magicPowerMultiplier);
+          enemy.isFrozen = true;
+          enemy.freezeTimer = 3.5;
+          enemy.takeDamage(totalDmg, new THREE.Vector3(0, 0.2, 0));
+          this.createFloatingText(`FROZEN! -${totalDmg}`, enemy.position, '#00e5ff');
+          this.checkWaveCompletion();
+        }, index * 50);
       }
     });
   }
@@ -2626,14 +2851,19 @@ class DemoGame {
       spawnPos.x = Math.max(-this.boundaries + 3, Math.min(this.boundaries - 3, spawnPos.x));
       spawnPos.z = Math.max(-this.boundaries + 3, Math.min(this.boundaries - 3, spawnPos.z));
 
-      if (i % 2 === 0) {
+      const rand = Math.random();
+      if (rand < 0.3) {
         const goblin = new Goblin(spawnPos);
         this.goblins.push(goblin);
         this.scene.add(goblin.character.meshGroup);
-      } else {
+      } else if (rand < 0.6) {
         const mage = new Mage(spawnPos);
         this.mages.push(mage);
         this.scene.add(mage.character.meshGroup);
+      } else {
+        const slime = new Slime(spawnPos);
+        this.slimes.push(slime);
+        this.scene.add(slime.meshGroup);
       }
 
       this.createSpawnParticles(spawnPos);
@@ -2643,13 +2873,15 @@ class DemoGame {
   }
 
   private checkWaveCompletion() {
-    const allDead = this.goblins.every((g) => g.isDead) && this.mages.every((m) => m.isDead);
+    const allDead = this.goblins.every((g) => g.isDead) && this.mages.every((m) => m.isDead) && this.slimes.every((s) => s.isDead);
     if (allDead) {
       setTimeout(() => {
         this.goblins.forEach((g) => this.scene.remove(g.character.meshGroup));
         this.mages.forEach((m) => this.scene.remove(m.character.meshGroup));
+        this.slimes.forEach((s) => this.scene.remove(s.meshGroup));
         this.goblins = [];
         this.mages = [];
+        this.slimes = [];
       }, 1000);
 
       this.spawnCountdown = 5.0;
@@ -2670,7 +2902,15 @@ class DemoGame {
     document.getElementById('wave-val')!.innerText = String(this.activeWave);
     document.getElementById('hud-grimoire-type')!.innerText = this.grimoireType.toUpperCase();
 
-    const activeCount = this.goblins.filter((g) => !g.isDead).length + this.mages.filter((m) => !m.isDead).length;
+    // Mana & Stamina
+    document.getElementById('mana-val')!.innerText = String(Math.round(this.playerMana));
+    document.getElementById('maxmana-val')!.innerText = String(this.playerMaxMana);
+    document.getElementById('player-mana')!.style.width = `${(this.playerMana / this.playerMaxMana) * 100}%`;
+
+    document.getElementById('stamina-val')!.innerText = this.stamina.toFixed(1);
+    document.getElementById('player-stamina')!.style.width = `${(this.stamina / this.maxStamina) * 100}%`;
+
+    const activeCount = this.goblins.filter((g) => !g.isDead).length + this.mages.filter((m) => !m.isDead).length + this.slimes.filter((s) => !s.isDead).length;
     document.getElementById('goblins-active-val')!.innerText = String(activeCount);
   }
 
@@ -2707,6 +2947,9 @@ class DemoGame {
     this.speedMultiplier = 1.0;
     this.magicPowerMultiplier = this.grimoireType === '4-leaf' ? 2.0 : 1.0;
 
+    this.playerMana = this.playerMaxMana;
+    this.stamina = this.maxStamina;
+
     this.playerPos.set(0, 0, 0);
     this.player.meshGroup.position.set(0, 0, 0);
     this.player.meshGroup.scale.set(1.0, 1.0, 1.0);
@@ -2723,6 +2966,8 @@ class DemoGame {
     this.goblins = [];
     this.mages.forEach((m) => this.scene.remove(m.character.meshGroup));
     this.mages = [];
+    this.slimes.forEach((s) => this.scene.remove(s.meshGroup));
+    this.slimes = [];
     this.projectiles.forEach((p) => this.scene.remove(p.mesh));
     this.projectiles = [];
 
@@ -2851,8 +3096,18 @@ class DemoGame {
         moveDirection.normalize();
       }
 
-      const isSprinting = this.keys['shift'] || (gp && (gp.buttons[10].pressed || gp.buttons[4].pressed));
-      const speed = (isSprinting ? 6.5 : 4.0) * this.speedMultiplier;
+      const wantsToSprint = this.keys['shift'] || (gp && (gp.buttons[10].pressed || gp.buttons[4].pressed));
+      const isMoving = moveLen > 0;
+
+      if (wantsToSprint && isMoving && this.stamina > 0) {
+        this.isHovering = true;
+        this.stamina = Math.max(0, this.stamina - dt);
+      } else {
+        this.isHovering = false;
+        this.stamina = Math.min(this.maxStamina, this.stamina + dt * this.staminaRegenSpeed);
+      }
+
+      const speed = (this.isHovering ? 7.2 : 4.0) * this.speedMultiplier;
 
       this.playerPos.addScaledVector(moveDirection, speed * dt);
 
@@ -2863,6 +3118,8 @@ class DemoGame {
 
       this.player.animateWalk(speed, this.clock.getElapsedTime());
     } else {
+      this.isHovering = false;
+      this.stamina = Math.min(this.maxStamina, this.stamina + dt * this.staminaRegenSpeed);
       this.player.animateWalk(0, 0);
     }
 
@@ -2882,7 +3139,19 @@ class DemoGame {
     this.playerPos.x = Math.max(-this.boundaries, Math.min(this.boundaries, this.playerPos.x));
     this.playerPos.z = Math.max(-this.boundaries, Math.min(this.boundaries, this.playerPos.z));
 
-    this.player.meshGroup.position.copy(this.playerPos);
+    if (this.isHovering) {
+      const hoverHeight = 0.45 + Math.sin(this.clock.getElapsedTime() * 12) * 0.08;
+      this.player.meshGroup.position.copy(this.playerPos).add(new THREE.Vector3(0, hoverHeight, 0));
+      this.player.meshGroup.rotation.x = 0.15; // Lean forward
+
+      // Spawn wind hover particles
+      if (Math.random() < 0.18) {
+        this.createSpawnParticles(new THREE.Vector3().copy(this.playerPos).add(new THREE.Vector3(0, 0.1, 0)));
+      }
+    } else {
+      this.player.meshGroup.position.copy(this.playerPos);
+      this.player.meshGroup.rotation.x = 0;
+    }
 
     if (this.isInvulnerable && this.nullifyShieldMesh) {
       this.nullifyShieldMesh.position.copy(this.playerPos).add(new THREE.Vector3(0, 1.0, 0));
@@ -2899,7 +3168,7 @@ class DemoGame {
       }
 
       if (p.isRift) {
-        this.goblins.concat(this.mages as any).forEach((enemy: any) => {
+        this.getActiveEnemies().forEach((enemy: any) => {
           if (enemy.isDead) return;
           const dist = enemy.position.distanceTo(p.mesh.position);
           if (dist < 6.0) {
@@ -2912,7 +3181,7 @@ class DemoGame {
       const isTickTime = Math.floor(p.life * 10) % 3 === 0;
 
       if (p.owner === 'player') {
-        this.goblins.concat(this.mages as any).forEach((enemy: any) => {
+        this.goblins.concat(this.mages as any).concat(this.slimes as any).forEach((enemy: any) => {
           if (enemy.isDead) return;
           const dist = p.mesh.position.distanceTo(enemy.position);
           
@@ -3112,6 +3381,9 @@ class DemoGame {
         }
       }
 
+      this.playerMana = Math.min(this.playerMaxMana, this.playerMana + this.manaRegenRate * dt);
+      this.updateHUD();
+
       this.updateGamepad(dt);
     }
 
@@ -3135,12 +3407,23 @@ class DemoGame {
       this.resolveObstacleCollisions(m.position, 0.4);
     });
 
+    this.slimes.forEach((s) => {
+      s.update(dt, this.playerPos, () => {
+        this.handlePlayerHurt(s.position, 8);
+      });
+      this.resolveObstacleCollisions(s.position, 0.45);
+    });
+
     this.updateProjectiles(dt);
     this.updateParticles(dt);
     this.updateCamera(dt);
     this.updateSpawner(dt);
 
     this.renderer.render(this.scene, this.camera);
+  }
+
+  private getActiveEnemies(): any[] {
+    return (this.goblins as any[]).concat(this.mages).concat(this.slimes);
   }
 
   private initObstacles() {
