@@ -863,6 +863,7 @@ class DemoGame {
   // UI States
   private isSpellbookOpen = false;
   private isShopOpen = false;
+  private isPaused = false;
 
   // Spawners & Zone Management
   private goblinsToSpawnNext = 1;
@@ -1031,6 +1032,26 @@ class DemoGame {
         border: 1px solid #00ffcc; padding: 6px 12px; border-radius: 15px;
         font-size: 0.85rem; font-weight: bold; pointer-events: none; z-index: 10;
         box-shadow: 0 0 10px rgba(0,255,204,0.3); font-family: sans-serif;
+      }
+      .close-x-btn {
+        position: absolute; top: 15px; right: 15px; background: none; border: none;
+        color: #ff4b2b; font-size: 1.8rem; font-weight: bold; cursor: pointer;
+        transition: color 0.2s, transform 0.2s; line-height: 1; z-index: 10;
+        font-family: sans-serif;
+      }
+      .close-x-btn:hover { color: #ff3333; transform: scale(1.15); }
+      .close-x-btn-spellbook {
+        position: absolute; top: 15px; right: 15px; background: none; border: none;
+        color: #3e2723; font-size: 1.8rem; font-weight: bold; cursor: pointer;
+        transition: color 0.2s, transform 0.2s; line-height: 1; z-index: 10;
+        font-family: sans-serif;
+      }
+      .close-x-btn-spellbook:hover { color: #8b2500; transform: scale(1.15); }
+      .pause-overlay {
+        position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(10, 12, 16, 0.85); display: flex; flex-direction: column;
+        justify-content: center; align-items: center; z-index: 98; pointer-events: auto;
+        backdrop-filter: blur(10px); font-family: sans-serif;
       }
     `;
     document.head.appendChild(style);
@@ -1295,17 +1316,33 @@ class DemoGame {
         }
       }
 
+      // Escape close all UI
+      if (e.key === 'Escape') {
+        this.isSpellbookOpen = false;
+        document.getElementById('spellbook-overlay')!.style.display = 'none';
+        this.isShopOpen = false;
+        document.getElementById('shop-overlay')!.style.display = 'none';
+        if (this.isPaused) {
+          this.togglePause();
+        }
+      }
+
+      // '=' Pause Button
+      if (key === '=') {
+        this.togglePause();
+      }
+
       // Skill casts (Keyboard)
-      if (key === '1' && this.gameStarted && !this.isShopOpen && !this.isSpellbookOpen) {
+      if (key === '1' && this.gameStarted && !this.isShopOpen && !this.isSpellbookOpen && !this.isPaused) {
         this.castBasic();
       }
-      if (key === '2' && this.gameStarted && !this.isShopOpen && !this.isSpellbookOpen) {
+      if (key === '2' && this.gameStarted && !this.isShopOpen && !this.isSpellbookOpen && !this.isPaused) {
         this.castCombo();
       }
-      if ((key === '3' || key === 'r') && this.gameStarted && !this.isShopOpen && !this.isSpellbookOpen) {
+      if ((key === '3' || key === 'r') && this.gameStarted && !this.isShopOpen && !this.isSpellbookOpen && !this.isPaused) {
         this.castSkill();
       }
-      if ((key === '4' || key === 'f') && this.gameStarted && !this.isShopOpen && !this.isSpellbookOpen) {
+      if ((key === '4' || key === 'f') && this.gameStarted && !this.isShopOpen && !this.isSpellbookOpen && !this.isPaused) {
         this.castUltimate();
       }
     });
@@ -1320,7 +1357,7 @@ class DemoGame {
     });
 
     window.addEventListener('mousedown', (e) => {
-      if (this.isShopOpen || this.isSpellbookOpen || !this.gameStarted || this.playerHealth <= 0) return;
+      if (this.isShopOpen || this.isSpellbookOpen || this.isPaused || !this.gameStarted || this.playerHealth <= 0) return;
 
       if (e.button === 0) {
         // Left-Click: Basic Cast
@@ -1428,7 +1465,8 @@ class DemoGame {
 
       <!-- Relic Shop Overlay -->
       <div class="shop-overlay" id="shop-overlay" style="display: none;">
-        <div class="shop-container">
+        <div class="shop-container" style="position: relative;">
+          <button class="close-x-btn" id="shop-close-x">&times;</button>
           <h2 style="margin:0; font-size:2rem; color:#00ffcc;">Relic Merchant Shop</h2>
           <p style="color:#a8b2c1; margin-top:5px;">Purchase magical relics to permanently boost your stats. Current Gold: <span id="shop-gold" style="color:#f9d423; font-weight:bold;">0</span></p>
           <div class="shop-cards">
@@ -1460,7 +1498,8 @@ class DemoGame {
 
       <!-- Parchment Spellbook Overlay -->
       <div class="spellbook-overlay" id="spellbook-overlay" style="display: none;">
-        <div class="spellbook-book">
+        <div class="spellbook-book" style="position: relative;">
+          <button class="close-x-btn-spellbook" id="spellbook-close-x">&times;</button>
           <!-- Page 1 -->
           <div class="spellbook-page">
             <div class="spellbook-title">MAGE GRIMOIRE</div>
@@ -1495,6 +1534,13 @@ class DemoGame {
         <h1 style="font-size: 4rem; margin: 0 0 10px 0; background: linear-gradient(45deg, #ff416c, #ff4b2b); -webkit-background-clip: text; -webkit-text-fill-color: transparent; text-shadow: 0 0 30px rgba(255,65,108,0.5);">DEFEATED</h1>
         <p style="font-size: 1.5rem; margin: 0 0 30px 0; color: #a8b2c1; font-family: sans-serif;">You cleared Wave <span id="final-wave-val">1</span> with <span id="final-score-val">0</span> kills</p>
         <button id="restart-btn" style="background: linear-gradient(45deg, #ff4b2b, #ff416c); border: none; color: #fff; padding: 15px 40px; font-size: 1.2rem; border-radius: 30px; cursor: pointer; font-weight: bold; box-shadow: 0 5px 20px rgba(255,75,43,0.4); transition: transform 0.2s; font-family: sans-serif;">RESPAWN</button>
+      </div>
+
+      <!-- Pause Overlay -->
+      <div id="pause-overlay" class="pause-overlay" style="display: none;">
+        <h1 style="font-size: 3.5rem; margin: 0 0 10px 0; color: #00ffcc; text-shadow: 0 0 20px rgba(0,255,204,0.4);">GAME PAUSED</h1>
+        <p style="font-size: 1.2rem; margin: 0 0 30px 0; color: #a8b2c1;">Press = or ESCAPE to resume</p>
+        <button id="resume-btn" style="background: linear-gradient(45deg, #00ffcc, #0077ff); border: none; color: #111; padding: 12px 35px; font-size: 1.1rem; border-radius: 25px; cursor: pointer; font-weight: bold; box-shadow: 0 5px 15px rgba(0,255,204,0.3); transition: transform 0.2s;">RESUME</button>
       </div>
 
       <!-- Dynamic Zone Indicator -->
@@ -1608,6 +1654,18 @@ class DemoGame {
     document.getElementById('slot-skill')!.addEventListener('click', () => this.castSkill());
     document.getElementById('slot-ultimate')!.addEventListener('click', () => this.castUltimate());
     document.getElementById('slot-spellbook')!.addEventListener('click', () => this.toggleSpellbook());
+
+    document.getElementById('shop-close-x')!.addEventListener('click', () => {
+      this.toggleShop();
+    });
+
+    document.getElementById('spellbook-close-x')!.addEventListener('click', () => {
+      this.toggleSpellbook();
+    });
+
+    document.getElementById('resume-btn')!.addEventListener('click', () => {
+      this.togglePause();
+    });
 
     document.getElementById('restart-btn')!.addEventListener('click', () => {
       this.resetGame();
@@ -1817,6 +1875,19 @@ class DemoGame {
     }
   }
 
+  private togglePause() {
+    if (!this.gameStarted || this.playerHealth <= 0) return;
+    this.isPaused = !this.isPaused;
+    const el = document.getElementById('pause-overlay')!;
+    el.style.display = this.isPaused ? 'flex' : 'none';
+    if (this.isPaused) {
+      this.isSpellbookOpen = false;
+      document.getElementById('spellbook-overlay')!.style.display = 'none';
+      this.isShopOpen = false;
+      document.getElementById('shop-overlay')!.style.display = 'none';
+    }
+  }
+
   // ==========================================
   // Magic Spell Casting Logic
   // ==========================================
@@ -1840,7 +1911,7 @@ class DemoGame {
 
     this.triggerCastEffect();
 
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.player.meshGroup.quaternion).normalize();
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.player.meshGroup.quaternion).normalize();
     const spawnPos = new THREE.Vector3().copy(this.playerPos).add(new THREE.Vector3(0, 1.2, 0)).addScaledVector(forward, 0.5);
 
     if (this.magicAttribute === 'fire') {
@@ -1862,14 +1933,14 @@ class DemoGame {
 
     this.triggerCastEffect();
 
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.player.meshGroup.quaternion).normalize();
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.player.meshGroup.quaternion).normalize();
     const spawnPos = new THREE.Vector3().copy(this.playerPos).add(new THREE.Vector3(0, 1.2, 0)).addScaledVector(forward, 0.5);
 
     if (this.magicAttribute === 'fire') {
       for (let i = 0; i < 3; i++) {
         setTimeout(() => {
           if (this.playerHealth <= 0) return;
-          const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(this.player.meshGroup.quaternion).normalize();
+          const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(this.player.meshGroup.quaternion).normalize();
           const sp = new THREE.Vector3().copy(this.playerPos).add(new THREE.Vector3(0, 1.2, 0)).addScaledVector(fwd, 0.5);
           this.spawnProjectile(sp, fwd.multiplyScalar(16), 18, 'fire');
         }, i * 150);
@@ -1900,7 +1971,7 @@ class DemoGame {
 
     this.triggerCastEffect();
 
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.player.meshGroup.quaternion).normalize();
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.player.meshGroup.quaternion).normalize();
 
     if (this.magicAttribute === 'fire') {
       const targetPos = new THREE.Vector3().copy(this.playerPos).addScaledVector(forward, 5.0);
@@ -1930,7 +2001,7 @@ class DemoGame {
 
     this.triggerCastEffect();
 
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.player.meshGroup.quaternion).normalize();
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.player.meshGroup.quaternion).normalize();
 
     if (this.magicAttribute === 'fire') {
       const spawnPos = new THREE.Vector3().copy(this.playerPos).add(new THREE.Vector3(0, 1.2, 0)).addScaledVector(forward, 1.0);
@@ -2078,7 +2149,7 @@ class DemoGame {
   }
 
   private castMeleeClaw(dmg: number) {
-    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(this.player.meshGroup.quaternion).normalize();
+    const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.player.meshGroup.quaternion).normalize();
     const swipeCenter = new THREE.Vector3().copy(this.playerPos).addScaledVector(forward, 1.3);
 
     const geo = new THREE.BoxGeometry(1.6, 0.4, 0.1);
@@ -2558,8 +2629,10 @@ class DemoGame {
     document.getElementById('spawner-countdown')!.style.display = 'none';
     document.getElementById('shop-overlay')!.style.display = 'none';
     document.getElementById('spellbook-overlay')!.style.display = 'none';
+    document.getElementById('pause-overlay')!.style.display = 'none';
     this.isShopOpen = false;
     this.isSpellbookOpen = false;
+    this.isPaused = false;
 
     this.updateHUD();
     this.updateSpellbookContent();
@@ -2886,9 +2959,9 @@ class DemoGame {
   private animate() {
     requestAnimationFrame(this.animate.bind(this));
 
-    const dt = Math.min(this.clock.getDelta(), 0.1);
+    const dt = this.isPaused ? 0 : Math.min(this.clock.getDelta(), 0.1);
 
-    if (this.gameStarted) {
+    if (this.gameStarted && !this.isPaused) {
       for (const key in this.cooldowns) {
         if (this.cooldowns[key as keyof typeof this.cooldowns] > 0) {
           this.cooldowns[key as keyof typeof this.cooldowns] = Math.max(0, this.cooldowns[key as keyof typeof this.cooldowns] - dt);
