@@ -1021,6 +1021,7 @@ class DemoGame {
   private stamina = 3.0;
   private staminaRegenSpeed = 1.0;
   private isHovering = false;
+  private staminaCooldown = 0; // Cooldown when hitting 0 stamina
 
   // Physics/Controls
   private keys: Record<string, boolean> = {};
@@ -3022,6 +3023,7 @@ class DemoGame {
 
     this.playerMana = this.playerMaxMana;
     this.stamina = this.maxStamina;
+    this.staminaCooldown = 0;
 
     this.playerPos.set(0, 0, 0);
     this.player.meshGroup.position.set(0, 0, 0);
@@ -3168,6 +3170,10 @@ class DemoGame {
   }
 
   private updatePlayer(dt: number) {
+    if (this.staminaCooldown > 0) {
+      this.staminaCooldown -= dt;
+    }
+
     if (this.playerHealth <= 0 || !this.gameStarted || this.isShopOpen || this.isSpellbookOpen) {
       this.player.animateWalk(0, 0);
       return;
@@ -3210,9 +3216,14 @@ class DemoGame {
       const wantsToSprint = this.keys['shift'] || (gp && (gp.buttons[10].pressed || gp.buttons[4].pressed));
       const isMoving = moveLen > 0;
 
-      if (wantsToSprint && isMoving && this.stamina > 0) {
+      if (wantsToSprint && isMoving && this.stamina > 0 && this.staminaCooldown <= 0) {
         this.isHovering = true;
         this.stamina = Math.max(0, this.stamina - dt);
+        if (this.stamina <= 0) {
+          this.stamina = 0;
+          this.staminaCooldown = 1.0; // 1 second cooldown
+          this.isHovering = false;
+        }
       } else {
         this.isHovering = false;
         this.stamina = Math.min(this.maxStamina, this.stamina + dt * this.staminaRegenSpeed);
